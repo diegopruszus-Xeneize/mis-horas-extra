@@ -66,3 +66,43 @@ if st.button("💾 Guardar Jornada"):
                 if antes_13 > 8:
                     h_50 = antes_13 - 8
             else:
+                if total_h > 8: h_50 = total_h - 8
+        else: # Lunes a Viernes
+            if total_h > 8: h_50 = total_h - 8
+        
+        monto_extra = (h_50 * valor_hora * 1.5) + (h_100 * valor_hora * 2.0)
+        
+        nueva_fila = {
+            "Fecha": fecha.strftime("%Y-%m-%d"),
+            "Día": ["Lunes","Martes","Miércoles","Jueves","Viernes","Sábado","Domingo"][dia_semana],
+            "Entrada": entrada.strftime("%H:%M"),
+            "Salida": salida.strftime("%H:%M"),
+            "Total": round(total_h, 2),
+            "H_50": round(h_50, 2),
+            "H_100": round(h_100, 2),
+            "Monto_Extra": round(monto_extra, 2)
+        }
+        
+        df_nuevo = pd.DataFrame([nueva_fila])
+        if not os.path.isfile(ARCHIVO_DATOS):
+            df_nuevo.to_csv(ARCHIVO_DATOS, index=False)
+        else:
+            df_nuevo.to_csv(ARCHIVO_DATOS, mode='a', header=False, index=False)
+        st.success(f"¡Jornada guardada! Día: {nueva_fila['Día']}")
+    else:
+        st.error("Error: La salida debe ser posterior a la entrada.")
+
+# --- HISTORIAL Y MÉTRICAS ---
+st.divider()
+if os.path.isfile(ARCHIVO_DATOS):
+    df = pd.read_csv(ARCHIVO_DATOS)
+    st.write("### Historial Mensual")
+    st.dataframe(df, use_container_width=True)
+    
+    c1, c2 = st.columns(2)
+    with c1:
+        st.metric("Total Horas Extras (Dinero)", f"${df['Monto_Extra'].sum():,.2f}")
+    with c2:
+        # Botón para descargar el archivo y subirlo a Drive
+        csv = df.to_csv(index=False).encode('utf-8')
+        st.download_button("📥 Descargar CSV para Google Drive", csv, "mis_horas_final.csv", "text/csv")
