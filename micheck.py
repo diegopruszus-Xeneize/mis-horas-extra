@@ -27,11 +27,10 @@ with st.sidebar:
     if st.button("❌ Eliminar Último Registro"):
         if not df.empty:
             df = df[:-1]
-            # Para el botón de borrar:
-if st.button("❌ Eliminar Último Registro"):
+            
+            if st.button("❌ Eliminar Último Registro"):
     if not df.empty:
         df = df[:-1]
-        # Cambiamos update por esta línea:
         conn.update(worksheet="Sheet1", data=df) 
         st.warning("Última fila eliminada.")
         st.rerun()
