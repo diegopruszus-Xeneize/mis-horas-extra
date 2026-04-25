@@ -4,32 +4,29 @@ from datetime import datetime, time
 import os
 
 # Configuración de la página
-st.set_page_config(page_title="App Horas Inteligente", layout="wide")
-st.title("⏱️ Registro de Horas (Sábados Automáticos)")
+st.set_page_config(page_title="Control de Horas - 9 a 18", layout="wide")
+st.title("⏱️ Mi Registro de Horas (9 a 18 hs)")
 
-# Nombre del archivo de base de datos
 ARCHIVO_DATOS = "mis_horas.csv"
 
-# --- BARRA LATERAL (CONFIGURACIÓN) ---
+# --- BARRA LATERAL ---
 with st.sidebar:
     st.header("💰 Configuración")
     sueldo = st.number_input("Sueldo Base Mensual", value=500000)
-    horas_mes = st.number_input("Horas por mes", value=160)
+    # Si trabajas 9hs de lunes a viernes, son aprox 180hs al mes
+    horas_mes = st.number_input("Horas por mes", value=180)
     valor_hora = sueldo / horas_mes
     st.write(f"Valor hora normal: **${valor_hora:.2f}**")
     
     st.divider()
-    # Botón para limpiar los datos de prueba
     if st.button("🗑️ Borrar Datos de Prueba"):
         if os.path.exists(ARCHIVO_DATOS):
             os.remove(ARCHIVO_DATOS)
-            st.success("Archivo borrado correctamente.")
+            st.success("Limpieza completa.")
             st.rerun()
-        else:
-            st.info("No hay datos para borrar.")
 
 # --- ENTRADA DE DATOS ---
-st.subheader("Registrar Nueva Jornada")
+st.subheader("Registrar Jornada")
 col1, col2, col3, col4 = st.columns(4)
 
 with col1:
@@ -51,24 +48,30 @@ if st.button("💾 Guardar Jornada"):
         h_100 = 0.0
         dia_semana = fecha.weekday() # 0=Lunes, 5=Sábado, 6=Domingo
 
-        # --- LÓGICA AUTOMÁTICA DE CÁLCULO ---
-        if es_feriado or dia_semana == 6: # Feriado o Domingo
+        # --- LÓGICA PERSONALIZADA (Tu horario 9-18) ---
+        
+        # 1. DOMINGOS O FERIADOS: Todo al 100%
+        if es_feriado or dia_semana == 6:
             h_100 = total_h
-        elif dia_semana == 5: # Es SÁBADO
+            h_50 = 0.0
+            
+        # 2. SÁBADOS: Antes de las 13:00 (50% si pasas tu jornada), Después de las 13:00 (100%)
+        elif dia_semana == 5:
             limite_sabado = datetime.combine(fecha, time(13, 0))
-            if h_sal > limite_sabado:
-                # Horas antes de las 13:00
-                antes_13 = max(0, (limite_sabado - h_ent).total_seconds() / 3600)
-                # Horas después de las 13:00
-                despues_13 = max(0, (h_sal - limite_sabado).total_seconds() / 3600)
-                
-                h_100 = despues_13
-                if antes_13 > 8:
-                    h_50 = antes_13 - 8
+            if h_ent >= limite_sabado:
+                h_100 = total_h
+            elif h_sal > limite_sabado:
+                h_100 = (h_sal - limite_sabado).total_seconds() / 3600
+                h_50 = (limite_sabado - h_ent).total_seconds() / 3600
             else:
-                if total_h > 8: h_50 = total_h - 8
-        else: # Lunes a Viernes
-            if total_h > 8: h_50 = total_h - 8
+                h_50 = total_h
+
+        # 3. LUNES A VIERNES: Extras después de las 9 horas (después de las 18:00)
+        else:
+            if total_h > 9:
+                h_50 = total_h - 9
+            else:
+                h_50 = 0.0
         
         monto_extra = (h_50 * valor_hora * 1.5) + (h_100 * valor_hora * 2.0)
         
@@ -77,10 +80,10 @@ if st.button("💾 Guardar Jornada"):
             "Día": ["Lunes","Martes","Miércoles","Jueves","Viernes","Sábado","Domingo"][dia_semana],
             "Entrada": entrada.strftime("%H:%M"),
             "Salida": salida.strftime("%H:%M"),
-            "Total": round(total_h, 2),
-            "H_50": round(h_50, 2),
-            "H_100": round(h_100, 2),
-            "Monto_Extra": round(monto_extra, 2)
+            "Total_Hs": round(total_h, 2),
+            "Extras_50": round(h_50, 2),
+            "Extras_100": round(h_100, 2),
+            "Monto_a_Cobrar": round(monto_extra, 2)
         }
         
         df_nuevo = pd.DataFrame([nueva_fila])
@@ -88,21 +91,17 @@ if st.button("💾 Guardar Jornada"):
             df_nuevo.to_csv(ARCHIVO_DATOS, index=False)
         else:
             df_nuevo.to_csv(ARCHIVO_DATOS, mode='a', header=False, index=False)
-        st.success(f"¡Jornada guardada! Día: {nueva_fila['Día']}")
+        st.success(f"Registrado: {nueva_fila['Día']} - Extras: {h_50 + h_100} hs")
     else:
-        st.error("Error: La salida debe ser posterior a la entrada.")
+        st.error("La hora de salida debe ser mayor a la de entrada.")
 
-# --- HISTORIAL Y MÉTRICAS ---
+# --- TABLA ---
 st.divider()
 if os.path.isfile(ARCHIVO_DATOS):
     df = pd.read_csv(ARCHIVO_DATOS)
-    st.write("### Historial Mensual")
+    st.write("### Mi Historial")
     st.dataframe(df, use_container_width=True)
+    st.metric("Total Extras del Mes", f"${df['Monto_a_Cobrar'].sum():,.2f}")
     
-    c1, c2 = st.columns(2)
-    with c1:
-        st.metric("Total Horas Extras (Dinero)", f"${df['Monto_Extra'].sum():,.2f}")
-    with c2:
-        # Botón para descargar el archivo y subirlo a Drive
-        csv = df.to_csv(index=False).encode('utf-8')
-        st.download_button("📥 Descargar CSV para Google Drive", csv, "mis_horas_final.csv", "text/csv")
+    csv = df.to_csv(index=False).encode('utf-8')
+    st.download_button("📥 Descargar Reporte", csv, "control_horas.csv", "text/csv")
