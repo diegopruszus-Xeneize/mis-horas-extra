@@ -8,7 +8,14 @@ st.title("⏱️ Registro de Horas (Sábados Automáticos)")
 
 ARCHIVO_DATOS = "mis_horas.csv"
 
-with st.sidebar:
+with st.sidebar:st.divider()
+            if st.button("🗑️ Borrar Datos de Prueba"):
+            if os.path.exists(ARCHIVO_DATOS):
+            os.remove(ARCHIVO_DATOS)
+            st.success("Archivo borrado. Reiniciando...")
+            st.rerun()
+        else:
+            st.info("No hay datos para borrar.")
     st.header("💰 Configuración")
     sueldo = st.number_input("Sueldo Base Mensual", value=500000)
     horas_mes = st.number_input("Horas por mes", value=160)
