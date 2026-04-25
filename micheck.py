@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 from datetime import datetime, time
 import os
+import io  # Necesario para manejar el archivo en memoria
 
 # Configuración de la página
 st.set_page_config(page_title="Control de Horas", layout="wide")
@@ -20,7 +21,6 @@ with st.sidebar:
     st.divider()
     st.subheader("⚙️ Administrar Datos")
     
-    # Función para eliminar UNA sola fila
     if os.path.isfile(ARCHIVO_DATOS):
         df_admin = pd.read_csv(ARCHIVO_DATOS)
         if not df_admin.empty:
@@ -94,18 +94,47 @@ if st.button("💾 Guardar Jornada"):
         else:
             df_nuevo.to_csv(ARCHIVO_DATOS, mode='a', header=False, index=False)
         st.success(f"Registrado correctamente.")
+        st.rerun()
     else:
         st.error("Revisa las horas ingresadas.")
 
-# --- LISTADO DE HS. EXTRAS ---
+# --- LISTADO Y DESCARGA EN EXCEL ---
 st.divider()
 if os.path.isfile(ARCHIVO_DATOS):
     df = pd.read_csv(ARCHIVO_DATOS)
-    # Aquí cambiamos el nombre como pediste
     st.write("### Listado de Hs. extras")
     st.dataframe(df, use_container_width=True)
     
     st.metric("Total Extras del Mes", f"${df['Monto_a_Cobrar'].sum():,.2f}")
     
-    csv = df.to_csv(index=False).encode('utf-8')
-    st.download_button("📥 Descargar Reporte", csv, "listado_extras.csv", "text/csv")
+    # --- CREACIÓN DEL EXCEL EN MEMORIA ---
+    buffer = io.BytesIO()
+    
+    # Usamos XlsxWriter como motor para poder dar formato
+    with pd.ExcelWriter(buffer, engine='xlsxwriter') as writer:
+        df.to_excel(writer, index=False, sheet_name='Horas_Extras')
+        
+        # Acceder a los objetos de xlsxwriter
+        workbook  = writer.book
+        worksheet = writer.sheets['Horas_Extras']
+        
+        # Formatos
+        header_format = workbook.add_format({'bold': True, 'bg_color': '#D7E4BC', 'border': 1})
+        money_format = workbook.add_format({'num_format': '$#,##0.00'})
+        
+        # Aplicar formato a los encabezados
+        for col_num, value in enumerate(df.columns.values):
+            worksheet.write(0, col_num, value, header_format)
+            # Ajustar ancho de columna automáticamente
+            worksheet.set_column(col_num, col_num, 15)
+            
+        # Aplicar formato moneda a la última columna (Monto_a_Cobrar)
+        worksheet.set_column(len(df.columns)-1, len(df.columns)-1, 18, money_format)
+
+    # Botón de descarga
+    st.download_button(
+        label="📥 Descargar Reporte en Excel (.xlsx)",
+        data=buffer.getvalue(),
+        file_name=f"Reporte_Horas_{datetime.now().strftime('%m_%Y')}.xlsx",
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )
