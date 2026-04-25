@@ -109,3 +109,11 @@ if os.path.isfile(ARCHIVO_DATOS):
     
     csv = df.to_csv(index=False).encode('utf-8')
     st.download_button("📥 Descargar Reporte", csv, "listado_extras.csv", "text/csv")
+   # Al final de tu código, donde está el botón de descarga:
+    csv = df.to_csv(index=False).encode('utf-8')
+    st.download_button(
+        label="🚀 Preparar archivo para Google Drive",
+        data=csv,
+        file_name=f"Listado_Hs_Extras_{datetime.now().strftime('%m_%Y')}.csv",
+        mime="text/csv",
+    ) 
