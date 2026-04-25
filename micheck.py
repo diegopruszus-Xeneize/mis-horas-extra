@@ -4,8 +4,8 @@ from datetime import datetime, time
 import os
 
 # Configuración de la página
-st.set_page_config(page_title="Control de Horas - 9 a 18", layout="wide")
-st.title("⏱️ Mi Registro de Horas (9 a 18 hs)")
+st.set_page_config(page_title="Control de Horas", layout="wide")
+st.title("⏱️ Registro de Horas (9 a 18 hs)")
 
 ARCHIVO_DATOS = "mis_horas.csv"
 
@@ -13,13 +13,25 @@ ARCHIVO_DATOS = "mis_horas.csv"
 with st.sidebar:
     st.header("💰 Configuración")
     sueldo = st.number_input("Sueldo Base Mensual", value=500000)
-    # Si trabajas 9hs de lunes a viernes, son aprox 180hs al mes
     horas_mes = st.number_input("Horas por mes", value=180)
     valor_hora = sueldo / horas_mes
     st.write(f"Valor hora normal: **${valor_hora:.2f}**")
     
     st.divider()
-    if st.button("🗑️ Borrar Datos de Prueba"):
+    st.subheader("⚙️ Administrar Datos")
+    
+    # Función para eliminar UNA sola fila
+    if os.path.isfile(ARCHIVO_DATOS):
+        df_admin = pd.read_csv(ARCHIVO_DATOS)
+        if not df_admin.empty:
+            fecha_a_borrar = st.selectbox("Seleccionar fecha para eliminar:", df_admin["Fecha"].unique())
+            if st.button("❌ Eliminar esta Fila"):
+                df_admin = df_admin[df_admin["Fecha"] != fecha_a_borrar]
+                df_admin.to_csv(ARCHIVO_DATOS, index=False)
+                st.warning(f"Se eliminó el registro del {fecha_a_borrar}")
+                st.rerun()
+
+    if st.button("🗑️ BORRAR TODO EL MES"):
         if os.path.exists(ARCHIVO_DATOS):
             os.remove(ARCHIVO_DATOS)
             st.success("Limpieza completa.")
@@ -46,16 +58,10 @@ if st.button("💾 Guardar Jornada"):
     if total_h > 0:
         h_50 = 0.0
         h_100 = 0.0
-        dia_semana = fecha.weekday() # 0=Lunes, 5=Sábado, 6=Domingo
+        dia_semana = fecha.weekday()
 
-        # --- LÓGICA PERSONALIZADA (Tu horario 9-18) ---
-        
-        # 1. DOMINGOS O FERIADOS: Todo al 100%
         if es_feriado or dia_semana == 6:
             h_100 = total_h
-            h_50 = 0.0
-            
-        # 2. SÁBADOS: Antes de las 13:00 (50% si pasas tu jornada), Después de las 13:00 (100%)
         elif dia_semana == 5:
             limite_sabado = datetime.combine(fecha, time(13, 0))
             if h_ent >= limite_sabado:
@@ -65,13 +71,9 @@ if st.button("💾 Guardar Jornada"):
                 h_50 = (limite_sabado - h_ent).total_seconds() / 3600
             else:
                 h_50 = total_h
-
-        # 3. LUNES A VIERNES: Extras después de las 9 horas (después de las 18:00)
         else:
             if total_h > 9:
                 h_50 = total_h - 9
-            else:
-                h_50 = 0.0
         
         monto_extra = (h_50 * valor_hora * 1.5) + (h_100 * valor_hora * 2.0)
         
@@ -91,17 +93,19 @@ if st.button("💾 Guardar Jornada"):
             df_nuevo.to_csv(ARCHIVO_DATOS, index=False)
         else:
             df_nuevo.to_csv(ARCHIVO_DATOS, mode='a', header=False, index=False)
-        st.success(f"Registrado: {nueva_fila['Día']} - Extras: {h_50 + h_100} hs")
+        st.success(f"Registrado correctamente.")
     else:
-        st.error("La hora de salida debe ser mayor a la de entrada.")
+        st.error("Revisa las horas ingresadas.")
 
-# --- TABLA ---
+# --- LISTADO DE HS. EXTRAS ---
 st.divider()
 if os.path.isfile(ARCHIVO_DATOS):
     df = pd.read_csv(ARCHIVO_DATOS)
-    st.write("### Mi Historial")
+    # Aquí cambiamos el nombre como pediste
+    st.write("### Listado de Hs. extras")
     st.dataframe(df, use_container_width=True)
+    
     st.metric("Total Extras del Mes", f"${df['Monto_a_Cobrar'].sum():,.2f}")
     
     csv = df.to_csv(index=False).encode('utf-8')
-    st.download_button("📥 Descargar Reporte", csv, "control_horas.csv", "text/csv")
+    st.download_button("📥 Descargar Reporte", csv, "listado_extras.csv", "text/csv")
