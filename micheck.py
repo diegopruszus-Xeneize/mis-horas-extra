@@ -6,9 +6,15 @@ import io
 
 # Configuración de la página
 st.set_page_config(page_title="Control de Horas", layout="wide")
-st.title("⏱️ Registro de Horas (9 a 18 hs)")
+st.title("⏱️ Registro de Horas y Reportes Históricos")
 
+# --- CONFIGURACIÓN DE ARCHIVOS ---
 ARCHIVO_DATOS = "mis_horas.csv"
+CARPETA_REPORTES = "reportes_guardados"
+
+# Crear carpeta de reportes si no existe
+if not os.path.exists(CARPETA_REPORTES):
+    os.makedirs(CARPETA_REPORTES)
 
 # --- BARRA LATERAL ---
 with st.sidebar:
@@ -61,7 +67,6 @@ if st.button("💾 Guardar Jornada"):
         h_100 = 0.0
         dia_semana = fecha.weekday()
 
-        # Lógica de cálculo de horas extra
         if es_feriado or dia_semana == 6:  # Domingo o Feriado
             h_100 = total_h
         elif dia_semana == 5:  # Sábado
@@ -77,7 +82,6 @@ if st.button("💾 Guardar Jornada"):
             if total_h > 9:
                 h_50 = total_h - 9
         
-        # Guardamos solo las horas, no el monto (para que sea dinámico)
         nueva_fila = {
             "Fecha": fecha.strftime("%Y-%m-%d"),
             "Día": ["Lunes","Martes","Miércoles","Jueves","Viernes","Sábado","Domingo"][dia_semana],
@@ -102,49 +106,70 @@ if st.button("💾 Guardar Jornada"):
 st.divider()
 if os.path.isfile(ARCHIVO_DATOS):
     df = pd.read_csv(ARCHIVO_DATOS)
-    
-    # CÁLCULO DINÁMICO: Se recalculan los montos según el sueldo de la sidebar
     df["Monto_a_Cobrar"] = (df["Extras_50"] * valor_hora * 1.5) + (df["Extras_100"] * valor_hora * 2.0)
     
     st.write("### Listado de Hs. extras")
-    # Mostramos con formato de moneda en la vista de la app
     st.dataframe(df.style.format({"Monto_a_Cobrar": "${:,.2f}"}), use_container_width=True)
     
     total_extras = df['Monto_a_Cobrar'].sum()
     st.metric("Total Extras del Mes", f"${total_extras:,.2f}")
     
-    # --- GENERACIÓN DE EXCEL (.xlsx) ---
+    # --- GENERACIÓN DE EXCEL ---
+    nombre_archivo = f"Reporte_Extras_{datetime.now().strftime('%m_%Y_%H%M%S')}.xlsx"
+    ruta_guardado = os.path.join(CARPETA_REPORTES, nombre_archivo)
+    
     buffer = io.BytesIO()
     with pd.ExcelWriter(buffer, engine='xlsxwriter') as writer:
         df.to_excel(writer, index=False, sheet_name='Horas_Extras')
-        
         workbook  = writer.book
         worksheet = writer.sheets['Horas_Extras']
         
-        # Formatos para el Excel
-        formato_encabezado = workbook.add_format({
-            'bold': True, 
-            'bg_color': '#D7E4BC', 
-            'border': 1,
-            'align': 'center'
-        })
+        formato_encabezado = workbook.add_format({'bold': True, 'bg_color': '#D7E4BC', 'border': 1, 'align': 'center'})
         formato_moneda = workbook.add_format({'num_format': '$#,##0.00'})
         formato_centro = workbook.add_format({'align': 'center'})
 
-        # Aplicar formatos y anchos
         for col_num, col_name in enumerate(df.columns):
             worksheet.write(0, col_num, col_name, formato_encabezado)
-            
-            # Si es la columna de dinero, aplicar formato moneda
             if col_name == "Monto_a_Cobrar":
                 worksheet.set_column(col_num, col_num, 18, formato_moneda)
             else:
                 worksheet.set_column(col_num, col_num, 15, formato_centro)
 
-    # Botón para descargar el Excel
+    # Guardar copia automática en servidor
+    with open(ruta_guardado, "wb") as f:
+        f.write(buffer.getvalue())
+
     st.download_button(
-        label="📥 Descargar Reporte Excel (.xlsx)",
+        label="📥 Descargar y Guardar Reporte en Historial",
         data=buffer.getvalue(),
-        file_name=f"Reporte_Extras_{datetime.now().strftime('%m_%Y')}.xlsx",
+        file_name=nombre_archivo,
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
+
+# --- BUSCADOR HISTÓRICO ---
+st.divider()
+st.subheader("📂 Historial de Reportes Guardados")
+
+archivos_guardados = sorted(os.listdir(CARPETA_REPORTES), reverse=True)
+
+if archivos_guardados:
+    archivo_selec = st.selectbox("Seleccione un reporte anterior para descargar o borrar:", archivos_guardados)
+    ruta_completa = os.path.join(CARPETA_REPORTES, archivo_selec)
+    
+    with open(ruta_completa, "rb") as f:
+        bytes_archivo = f.read()
+        
+    c1, c2 = st.columns([1, 4])
+    with c1:
+        st.download_button(
+            label="💾 Descargar de nuevo",
+            data=bytes_archivo,
+            file_name=archivo_selec,
+            key=f"dl_{archivo_selec}"
+        )
+    with c2:
+        if st.button("🗑️ Eliminar permanentemente este archivo"):
+            os.remove(ruta_completa)
+            st.rerun()
+else:
+    st.info("Aún no hay reportes guardados en el historial.")
